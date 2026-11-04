@@ -185,11 +185,18 @@ release, so it is installed from its git tag. You need a C compiler
 With [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv tool install "scip-r[export] @ git+https://github.com/seandavi/scip-r" \
-    --with "tree-sitter-r @ git+https://github.com/r-lib/tree-sitter-r@v1.3.0"
+# Install as a tool:
+uv tool install "scip-r[export] @ git+https://github.com/seandavi/scip-r"
+
+# Or run ephemerally without installing:
+uvx --from "scip-r[export] @ git+https://github.com/seandavi/scip-r" scip-r --help
 ```
 
+`uv` reads `[tool.uv.sources]` from `pyproject.toml` and automatically fetches `tree-sitter-r`.
+
 With pip:
+
+Because `pip` does not read `[tool.uv.sources]`, `tree-sitter-r` must be installed first:
 
 ```bash
 pip install "tree-sitter-r @ git+https://github.com/r-lib/tree-sitter-r@v1.3.0"
