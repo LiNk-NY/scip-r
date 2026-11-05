@@ -66,9 +66,12 @@ sections: `name(formal, formal = default, ...)`.
   `` `foo<-`(x, value) ``).
 - Each default is its source text, with comments dropped and line breaks
   (plus their indentation) folded into one space, or into nothing next to
-  a bracket. Spacing within a line and string literals are kept verbatim,
-  so the text still parses to the same expression (`2L` stays `2L`, and
-  `"\n  "` stays as written).
+  a bracket. Statements inside brace blocks are joined with semicolons,
+  so folding a newline cannot merge two expressions. Other spacing within
+  a line and quoted tokens are kept verbatim, so the text still parses to
+  the same expression (`2L` stays `2L`, and `"\n  "` stays as written).
+  Literal newlines inside strings or backticked identifiers are preserved;
+  these signatures can therefore span more than one line.
 - For an S4 method, the formals are those of the **definition as
   written**, not the generic's formals that R rewrites the method to (with
   the real body moved into `.local()`). The generic's own symbol already

@@ -198,15 +198,24 @@ def _display_name(name: str) -> str:
     """``name`` as R would print it in a call: backticked unless syntactic.
     Names taken from a backticked identifier arrive with their backticks."""
     if len(name) > 1 and name.startswith("`") and name.endswith("`"):
-        name = name[1:-1]
+        # This is source spelling, not a decoded R name. Keep its escapes
+        # intact; only remove quoting when the contents need no escaping.
+        unquoted = name[1:-1]
+        if _SYNTACTIC_NAME_RE.fullmatch(unquoted) and unquoted not in _RESERVED_WORDS:
+            return unquoted
+        return name
     if _SYNTACTIC_NAME_RE.match(name) and name not in _RESERVED_WORDS:
         return name
     return "`" + name.replace("`", "\\`") + "`"
 
 
 def _atoms(node: Node) -> list[Node]:
-    """String and comment nodes under ``node``, in source order."""
-    if node.type in ("string", "comment"):
+    """Nodes requiring special rendering, in source order.
+
+    Identifiers, like strings, can contain quoted whitespace and escapes.
+    Brace blocks need statement separators rather than whitespace folding.
+    """
+    if node.type in ("string", "comment", "identifier", "braced_expression"):
         return [node]
     out: list[Node] = []
     for child in node.children:
@@ -223,15 +232,24 @@ _FOLD_TIGHT_RE = re.compile(r"(?<=[(\[{])\0|\0(?=[)\]},])")
 def _compact_source(src: bytes, node: Node) -> str:
     """Source text of an expression on one line: comments dropped and line
     breaks (with their indentation) folded into a single space, or into
-    nothing next to brackets. Spacing within a line and string literals are
-    kept verbatim, so the result still parses to the same expression."""
+    nothing next to brackets. Brace-block statements are joined with
+    semicolons. Other in-line spacing and quoted tokens are kept verbatim.
+    """
+    if node.type == "braced_expression":
+        statements = (child for child in node.named_children if child.type != "comment")
+        return "{" + "; ".join(_compact_source(src, child) for child in statements) + "}"
     parts: list[str] = []
     pos = node.start_byte
     for atom in _atoms(node):
         parts.append(
             _LINE_BREAK_RE.sub(_BREAK, src[pos : atom.start_byte].decode("utf-8", "replace"))
         )
-        parts.append(_BREAK if atom.type == "comment" else _decode(src, atom))
+        if atom.type == "comment":
+            parts.append(_BREAK)
+        elif atom.type == "braced_expression":
+            parts.append(_compact_source(src, atom))
+        else:
+            parts.append(_decode(src, atom))
         pos = atom.end_byte
     parts.append(_LINE_BREAK_RE.sub(_BREAK, src[pos : node.end_byte].decode("utf-8", "replace")))
     text = _FOLD_RE.sub(_BREAK, "".join(parts)).strip(_BREAK)

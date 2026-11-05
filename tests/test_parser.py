@@ -925,6 +925,37 @@ def test_signature_spans_lines_and_drops_comments(make_package: MakePackage) -> 
     assert idx.documents[0].symbols[0].documentation[0] == "f <- function(x,"
 
 
+@pytest.mark.parametrize(
+    ("default", "expected"),
+    [
+        ("{\n a <- 1\n a + 1\n}", "{a <- 1; a + 1}"),
+        (
+            "function() {\n a <- 1 # a comment with ;\n a + 1\n}",
+            "function() {a <- 1; a + 1}",
+        ),
+        (
+            "{\n if (TRUE) {\n a <- 1\n a + 1\n }\n 3\n}",
+            "{if (TRUE) {a <- 1; a + 1}; 3}",
+        ),
+        ("{a <- 1;\n a + 1}", "{a <- 1; a + 1}"),
+        ("{\n # nothing here\n}", "{}"),
+    ],
+)
+def test_signature_preserves_block_statement_boundaries(
+    make_package: MakePackage, default: str, expected: str
+) -> None:
+    src = f"f <- function(x = {default}) x\n"
+    sigs = _signatures(build_index(make_package({"R/a.R": src})))
+    assert sigs["f()."] == f"f(x = {expected})"
+
+
+def test_signature_preserves_quoted_default_tokens(make_package: MakePackage) -> None:
+    src = 'f <- function(x = `a\nb`, y = "a\nb") x\n'
+    sigs = _signatures(build_index(make_package({"R/a.R": src})))
+    # Quoted newlines belong to the token, not to source formatting.
+    assert sigs["f()."] == 'f(x = `a\nb`, y = "a\nb")'
+
+
 def test_signature_empty_formals_and_lambda(make_package: MakePackage) -> None:
     idx = build_index(make_package({"R/a.R": "f <- function() 1\ng <- \\(a, b = 2) a + b\n"}))
     sigs = _signatures(idx)
@@ -946,6 +977,13 @@ def test_signature_backticks_non_syntactic_names(make_package: MakePackage) -> N
     # signature backticks only when the name needs it
     assert sigs["`my fun`()."] == "`my fun`(a)"
     assert sigs["`plain`()."] == "plain(b)"
+
+
+@pytest.mark.parametrize("name", [r"`a\`b`", r"`a\\b`", r"`a\nb`"])
+def test_signature_preserves_escaped_function_names(make_package: MakePackage, name: str) -> None:
+    src = f"{name} <- function(x) x\n"
+    sigs = _signatures(build_index(make_package({"R/a.R": src})))
+    assert list(sigs.values()) == [f"{name}(x)"]
 
 
 def test_signature_chained_assignment(make_package: MakePackage) -> None:
